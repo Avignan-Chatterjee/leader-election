@@ -1,0 +1,37 @@
+This is an example of leader-election on a dstibuted application.
+This example uses etcd3. Etcd3 gives the capability use transactions.
+Leaser election is implemented using etcd3 based transation premitive.
+
+-----
+etcd3 setup
+-----
+There is a 3 VM setup (Ubuntu18.04) created on virtualbox. Etcd3 runs as 
+a docker container on all the VMs. It forms a 3 node etcd cluster.
+
+Following link has the details on setting up etcd3 container instance.
+https://etcd.io/docs/v3.2.17/op-guide/container/
+
+Assuming 3 nodes are namde as n1, n2 and n3, following command is run on each
+node to instantiate etcd3 instances. Plan is to use some orchestrator software
+to deploy etcd3 cluster across the nodes.
+
+Command ton run etcd3 on n1
+sudo docker run -d -v /usr/share/ca-certificates/:/etc/ssl/certs -p 2390:2390 -p 2389:2389 --name test-etcd quay.io/coreos/etcd:v3.4.9 /usr/local/bin/etcd --data-dir=/etcd-data --name etcd0 --advertise-client-urls http://192.168.0.190:2389 --listen-client-urls http://0.0.0.0:2389 --initial-advertise-peer-urls http://192.168.0.190:2390 --listen-peer-urls http://0.0.0.0:2390 --initial-cluster-token etcd-cluster-1 --initial-cluster etcd0=http://192.168.0.190:2390,etcd1=http://192.168.0.191:2390,etcd2=http://192.168.0.192:2390 --initial-cluster-state new  
+
+Command ton run etcd3 on n2
+sudo docker run -d -v /usr/share/ca-certificates/:/etc/ssl/certs -p 2390:2390 -p 2389:2389 --name test-etcd quay.io/coreos/etcd:v3.4.9 /usr/local/bin/etcd --data-dir=/etcd-data --name etcd1 --advertise-client-urls http://192.168.0.191:2389 --listen-client-urls http://0.0.0.0:2389 --initial-advertise-peer-urls http://192.168.0.191:2390 --listen-peer-urls http://0.0.0.0:2390 --initial-cluster-token etcd-cluster-1 --initial-cluster etcd0=http://192.168.0.190:2390,etcd1=http://192.168.0.191:2390,etcd2=http://192.168.0.192:2390 --initial-cluster-state new  
+
+
+Command ton run etcd3 on n3
+sudo docker run -d -v /usr/share/ca-certificates/:/etc/ssl/certs -p 2390:2390 -p 2389:2389 --name test-etcd quay.io/coreos/etcd:v3.4.9 /usr/local/bin/etcd --data-dir=/etcd-data --name etcd2 --advertise-client-urls http://192.168.0.192:2389 --listen-client-urls http://0.0.0.0:2389 --initial-advertise-peer-urls http://192.168.0.192:2390 --listen-peer-urls http://0.0.0.0:2390 --initial-cluster-token etcd-cluster-1 --initial-cluster etcd0=http://192.168.0.190:2390,etcd1=http://192.168.0.191:2390,etcd2=http://192.168.0.192:2390 --initial-cluster-state new  
+
+For running etcdctl with version 3 we need to set the following environ variable
+export ETCDCTL_API=3
+
+We also set this alias for etcdctl to access the local etcd cluster.
+alias etcdctl='etcdctl --endpoints "http://127.0.0.1:2389"'
+
+Some useful links as reference:
+https://github.com/etcd-io/etcd/tree/master/clientv3
+https://pypi.org/project/python-etcd/
+https://lzone.de/cheat-sheet/etcd
