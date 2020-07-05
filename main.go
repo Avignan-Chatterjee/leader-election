@@ -21,6 +21,7 @@ var (
 	hostid              uuid.UUID
 	leadershipLease     int64 = 4
 	isLeader            bool
+	leaseResp           *clientv3.LeaseGrantResponse
 )
 
 func main() {
@@ -50,7 +51,6 @@ func main() {
 }
 
 func acquirLeadership(u uuid.UUID) {
-	var resp *clientv3.LeaseGrantResponse
 	var err error
 	halfLife := time.Duration(leadershipLease - 1)
 	ticker := time.NewTicker(halfLife * time.Second)
@@ -60,7 +60,7 @@ func acquirLeadership(u uuid.UUID) {
 		case <-ticker.C:
 			// to renew the lease only once
 			if isLeader {
-				ka, kaerr := cli.KeepAliveOnce(context.TODO(), resp.ID)
+				ka, kaerr := cli.KeepAliveOnce(context.TODO(), leaseResp.ID)
 				if kaerr != nil {
 					fmt.Printf("Failed to renew lease :: %v", kaerr)
 				}
@@ -69,7 +69,7 @@ func acquirLeadership(u uuid.UUID) {
 		case <-acquireLeadershipCh:
 			fmt.Printf("Trying to acquire leadership\n")
 			// minimum lease TTL is 5-second
-			resp, err = cli.Grant(context.TODO(), leadershipLease)
+			leaseResp, err = cli.Grant(context.TODO(), leadershipLease)
 			if err != nil {
 				fmt.Printf("error getting lease :: %v", err)
 				continue
@@ -81,7 +81,7 @@ func acquirLeadership(u uuid.UUID) {
 				//If(clientv3.Compare(clientv3.Value("leader"), "=", "")).
 				If(clientv3.CreateRevision("leader")).
 				// the "Then" runs, since "xyz" > "abc"
-				Then(clientv3.OpPut("leader", u.String(), clientv3.WithLease(resp.ID))).
+				Then(clientv3.OpPut("leader", u.String(), clientv3.WithLease(leaseResp.ID))).
 				// the "Else" does not run
 				//Else(clientv3.OpPut("txn_failed", "true")).
 				Else().
@@ -94,11 +94,33 @@ func acquirLeadership(u uuid.UUID) {
 			if !txnResp.Succeeded {
 				isLeader = false
 				// The Leases will leak, does revoking clean it up?
-				_, err = cli.Revoke(context.TODO(), resp.ID)
-				if err != nil {
-					fmt.Printf("Unused lease revoke error :: %v", err)
+				if leaseResp != nil {
+					_, err = cli.Revoke(context.TODO(), leaseResp.ID)
+					if err != nil {
+						fmt.Printf("Unused lease revoke error :: %v", err)
+					}
+					leaseResp = nil
 				}
 			}
+		}
+	}
+}
+
+func handleLostLeadership() {
+	var err error
+	// If some other member deleted the leader key then the actual
+	// leader needs cleanup the lease.
+	if isLeader {
+		// This makes sure that if the leadership is lost then the
+		// Unhandled lease of the previous leader does not
+		// interfere with the new leader by cleaing up leadership
+		// key.
+		if leaseResp != nil {
+			_, err = cli.Revoke(context.TODO(), leaseResp.ID)
+			if err != nil {
+				fmt.Printf("Unused lease revoke error :: %v", err)
+			}
+			leaseResp = nil
 		}
 	}
 }
@@ -109,6 +131,7 @@ func watcher() {
 		for _, ev := range wresp.Events {
 			fmt.Printf("%s %q : %q\n", ev.Type, ev.Kv.Key, ev.Kv.Value)
 			if ev.Type == clientv3.EventTypeDelete {
+				handleLostLeadership()
 				acquireLeadershipCh <- struct{}{}
 			} else if string(ev.Kv.Value) == hostid.String() {
 				isLeader = true
