@@ -31,7 +31,7 @@ func main() {
 		Endpoints: endpoints,
 	})
 	if err != nil {
-		// handle error!
+		// TODO: Error handling.
 		fmt.Printf("Found error :: %v\n", err)
 	}
 	defer cli.Close()
@@ -43,6 +43,7 @@ func main() {
 	_, err = cli.Put(ctx, "sample_key", "sample_value")
 	cancel()
 	if err != nil {
+		// TODO: Error handling.
 		fmt.Printf("Found error :: %v", err)
 	}
 	go acquirLeadership(hostid)
@@ -58,7 +59,7 @@ func acquirLeadership(u uuid.UUID) {
 	for {
 		select {
 		case <-ticker.C:
-			// to renew the lease only once
+			// To renew the lease only once
 			if isLeader {
 				ka, kaerr := cli.KeepAliveOnce(context.TODO(), leaseResp.ID)
 				if kaerr != nil {
@@ -68,7 +69,7 @@ func acquirLeadership(u uuid.UUID) {
 			}
 		case <-acquireLeadershipCh:
 			fmt.Printf("Trying to acquire leadership\n")
-			// minimum lease TTL is 5-second
+			// Minimum lease TTL is 5-second
 			leaseResp, err = cli.Grant(context.TODO(), leadershipLease)
 			if err != nil {
 				fmt.Printf("error getting lease :: %v", err)
@@ -88,12 +89,13 @@ func acquirLeadership(u uuid.UUID) {
 				Commit()
 			cancelT()
 			if errT != nil {
+				// TODO: Error handling.
 				fmt.Printf("Failed transaction :: %v", err)
 			}
 			fmt.Printf("txn resp %v\n", txnResp.Succeeded)
 			if !txnResp.Succeeded {
 				isLeader = false
-				// The Leases will leak, does revoking clean it up?
+				// TODO: Check if Leases leak, does revoking clean it up?
 				if leaseResp != nil {
 					_, err = cli.Revoke(context.TODO(), leaseResp.ID)
 					if err != nil {
@@ -109,7 +111,7 @@ func acquirLeadership(u uuid.UUID) {
 func handleLostLeadership() {
 	var err error
 	// If some other member deleted the leader key then the actual
-	// leader needs cleanup the lease.
+	// leader needs to cleanup the lease.
 	if isLeader {
 		// This makes sure that if the leadership is lost then the
 		// Unhandled lease of the previous leader does not
