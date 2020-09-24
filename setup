@@ -1,7 +1,3 @@
-This is an example of leader-election on a distributed application.
-This example uses etcd3. Etcd3 gives the capability to use transactions.
-Leaser election is implemented using etcd3 based transation primitive.
-
 -----
 etcd3 setup
 -----
